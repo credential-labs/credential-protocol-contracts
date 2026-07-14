@@ -1,0 +1,22 @@
+[package]
+name = "credential_protocol"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+soroban-sdk = { workspace = true }
+sbt_registry = { path = "../sbt_registry", default-features = false, features = [] }
+zk_verifier = { path = "../zk_verifier", default-features = false, features = [] }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+sbt_registry = { path = "../sbt_registry", features = ["testutils"] }
+zk_verifier = { path = "../zk_verifier", features = ["testutils"] }
+proptest = { version = "1.6.0", default-features = false, features = ["std"] }
+
+[features]
+testutils = ["soroban-sdk/testutils", "sbt_registry/testutils", "zk_verifier/testutils"]
+legacy-tests = []
