@@ -588,6 +588,71 @@ impl SbtRegistryContract {
         }
     }
 
+    /// Verify that an address holds a valid, non-revoked SBT.
+    /// Returns true if the holder has at least one active SBT, false otherwise.
+    pub fn verify_sbt_holder(env: Env, holder: Address) -> bool {
+        let owner_tokens_key = DataKey::OwnerTokens(holder.clone());
+        if let Some(tokens) = env.storage().instance().get::<_, Vec<u64>>(&owner_tokens_key) {
+            // Check if holder has at least one token
+            if tokens.len() > 0 {
+                // Verify the first token is not blacklisted
+                if let Some(_) = env.storage().instance().get::<_, Address>(&DataKey::Blacklist(holder.clone())) {
+                    return false;
+                }
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Verify a specific SBT token by its ID.
+    /// Returns true if the token exists, is not burned, and holder is not blacklisted.
+    pub fn verify_sbt_token(env: Env, token_id: u64) -> bool {
+        if !env.storage().persistent().has(&DataKey::Token(token_id)) {
+            return false;
+        }
+
+        if let Some(token) = env.storage().persistent().get::<_, SoulboundToken>(&DataKey::Token(token_id)) {
+            // Check if owner is blacklisted
+            if env.storage().instance().has(&DataKey::Blacklist(token.owner)) {
+                return false;
+            }
+            return true;
+        }
+        false
+    }
+
+    /// Verify that a holder owns a specific SBT.
+    /// Returns true if the holder owns the given token_id.
+    pub fn verify_sbt_ownership(env: Env, holder: Address, token_id: u64) -> bool {
+        match self.get_token(env.clone(), token_id) {
+            token => {
+                token.owner == holder && self.verify_sbt_token(env, token_id)
+            }
+        }
+    }
+
+    /// Verify credential status for an SBT holder.
+    /// Checks if the SBT's linked credential is still valid (not revoked).
+    pub fn verify_credential_status(env: Env, token_id: u64) -> bool {
+        if !self.verify_sbt_token(env.clone(), token_id) {
+            return false;
+        }
+
+        if let Some(token) = env.storage().persistent().get::<_, SoulboundToken>(&DataKey::Token(token_id)) {
+            // Check credential cache first
+            let cache_key = DataKey::CredentialCache(token.credential_id);
+            if let Some(cached) = env.storage().instance().get::<_, CredentialCacheEntry>(&cache_key) {
+                let current_ledger = env.ledger().sequence();
+                // Use cache if still valid
+                if cached.cached_at + CREDENTIAL_CACHE_TTL_LEDGERS > current_ledger {
+                    return !cached.revoked;
+                }
+            }
+        }
+        true
+    }
+
     /// Returns the total number of SBTs ever minted.
     pub fn sbt_count(env: Env) -> u64 {
         env.storage()
